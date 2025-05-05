@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pixelfy - Minimalistische Pixelkunst</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css">
+    
+    <!-- TensorFlow.js und BodyPix für KI-gestützte Hintergrundentfernung -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.18.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/body-pix@2.2.0"></script>
+    
+    <style>
+        :root {
+            --primary-color: #3498db;
+            --secondary-color: #2c3e50;
+            --background-color: #f8f9fa;
+            --card-background: #ffffff;
+            --text-color: #333;
+        }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            line-height: 1.6;
+        }
+        
+        .preview-img, .output-img {
+            max-width: 100%;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            margin: 15px 0;
+            transition: transform 0.2s;
+        }
+        
+        .preview-img:hover, .output-img:hover {
+            transform: scale(1.02);
+        }
+        
+        .card {
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+            background-color: var(--card-background);
+            margin-bottom: 24px;
+            overflow: hidden;
+        }
+        
+        .card-header {
+            background-color: var(--secondary-color);
+            color: white;
+            font-weight: 600;
+            border: none;
+            padding: 15px 20px;
+        }
+        
+        .card-body {
+            padding: 20px;
+        }
+        
+        .btn-primary {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+        
+        .btn-primary:hover {
+            background-color: #2980b9;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(52, 152, 219, 0.3);
+        }
+        
+        .alert {
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 12px;
+            border: none;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        }
+        
+        .form-control, .form-select {
+            border-radius: 8px;
+            padding: 12px;
+            border: 1px solid #ddd;
+        }
+        
+        .history-item {
+            cursor: pointer;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            transition: background-color 0.2s;
+        }
+        
+        .history-item:hover {
+            background-color: #eee;
+        }
+        
+        .history-preview {
+            width: 40px;
+            height: 40px;
+            object-fit: cover;
+            border-radius: 4px;
+            margin-right: 10px;
+        }
+        
+        canvas {
+            display: none;
+        }
+        
+        .container {
+            max-width: 900px;
+            padding: 20px;
+        }
+        
+        h1 {
+            font-weight: 700;
+            color: var(--secondary-color);
+        }
+        
+        .tab-content {
+            margin-top: 20px;
+        }
+        
+        .logo {
+            font-size: 1.8rem;
+            font-weight: 700;
+            background: linear-gradient(45deg, var(--primary-color), var(--secondary-color));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.5px;
+        }
+        
+        .header-subtitle {
+            font-size: 1.1rem;
+            color: #666;
+            margin-bottom: 30px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="text-center mb-4">
+            <h1 class="logo">Pixelfy</h1>
+            <p class="header-subtitle">Minimalistische Pixelkunst im Browser</p>
+        </header>
+        
+        <div id="alertContainer" class="mb-3"></div>
+        
+        <ul class="nav nav-tabs" id="pixelfyTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="create-tab" data-bs-toggle="tab" data-bs-target="#create" type="button" role="tab" aria-controls="create" aria-selected="true">Erstellen</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="history-tab" data-bs-toggle="tab" data-bs-target="#history" type="button" role="tab" aria-controls="history" aria-selected="false">Historie</button>
+            </li>
+        </ul>
+        
+        <div class="tab-content" id="pixelfyTabContent">
+            <!-- Erstellen-Tab -->
+            <div class="tab-pane fade show active" id="create" role="tabpanel" aria-labelledby="create-tab">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">Bild</div>
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <label for="file" class="form-label">Bild auswählen:</label>
+                                    <input type="file" class="form-control" id="file" accept="image/png,image/jpeg,image/jpg,image/gif,image/webp">
+                                </div>
+                                
+                                <div class="d-grid gap-2">
+                                    <button type="button" id="defaultImageBtn" class="btn btn-outline-secondary">Katze verwenden</button>
+                                </div>
+                                
+                                <div id="preview" class="text-center"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">Einstellungen</div>
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <label for="pixelSize" class="form-label">Pixel-Größe: <span id="pixelSizeValue">12</span></label>
+                                    <input type="range" class="form-range" id="pixelSize" min="4" max="32" value="12">
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="method" class="form-label">Pixelierungsmethode:</label>
+                                    <select id="method" class="form-select">
+                                        <option value="standard">Standard</option>
+                                        <option value="nearest-neighbor">Nearest-Neighbor</option>
+                                        <option value="bilinear">Bilinear</option>
+                                        <option value="bicubic">Bicubic</option>
+                                        <option value="lanczos">Lanczos</option>
+                                        <option value="dithered">Dithered</option>
+                                        <option value="posterized">Posterized</option>
+                                        <option value="mosaic">Mosaik</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="row">
+                                    <div class="col-6">
+                                        <div class="mb-3">
+                                            <label for="width" class="form-label">Breite:</label>
+                                            <input type="number" class="form-control" id="width" min="16" max="512" value="64">
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="col-6">
+                                        <div class="mb-3">
+                                            <label for="height" class="form-label">Höhe:</label>
+                                            <input type="number" class="form-control" id="height" min="16" max="512" value="64">
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="d-grid gap-2">
+                                    <button type="button" id="processBtn" class="btn btn-primary">Bild pixelieren</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Neue Karte für die Hintergrundentfernung -->
+                <div class="card mt-3">
+                    <div class="card-header">Hintergrund entfernen</div>
+                    <div class="card-body">
+                        <ul class="nav nav-pills mb-3" id="bgRemovalTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="color-tab" data-bs-toggle="pill" data-bs-target="#color-removal" type="button" role="tab">Farbbasiert</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="ai-tab" data-bs-toggle="pill" data-bs-target="#ai-removal" type="button" role="tab">KI-basiert</button>
+                            </li>
+                        </ul>
+                        
+                        <div class="tab-content" id="bgRemovalTabContent">
+                            <!-- Farbbasierte Hintergrundentfernung -->
+                            <div class="tab-pane fade show active" id="color-removal" role="tabpanel">
+                                <p class="text-muted small">Wähle eine Farbe im Bild, die transparent werden soll.</p>
+                                
+                                <div class="d-flex align-items-center mb-3">
+                                    <button type="button" id="colorPickerBtn" class="btn btn-sm btn-outline-primary me-2">Farbe auswählen</button>
+                                    <div id="colorPreview" style="width: 30px; height: 30px; border: 1px solid #ddd; border-radius: 4px; display: none;"></div>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="tolerance" class="form-label">Toleranz: <span id="toleranceValue">30</span></label>
+                                    <input type="range" class="form-range" id="tolerance" min="5" max="100" value="30">
+                                    <div class="text-muted small">Höhere Werte entfernen mehr Farbvariationen.</div>
+                                </div>
+                                
+                                <div class="d-grid">
+                                    <button type="button" id="removeBgBtn" class="btn btn-outline-danger">Hintergrund entfernen</button>
+                                </div>
+                            </div>
+                            
+                            <!-- KI-basierte Hintergrundentfernung -->
+                            <div class="tab-pane fade" id="ai-removal" role="tabpanel">
+                                <p class="text-muted small">Verwendet TensorFlow.js und BodyPix, um Objekte zu erkennen und den Hintergrund zu entfernen.</p>
+                                
+                                <div id="aiStatus" class="alert alert-info">
+                                    TensorFlow.js wird geladen... Bitte warten.
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="segmentThreshold" class="form-label">Erkennungsgenauigkeit: <span id="segmentThresholdValue">0.7</span></label>
+                                    <input type="range" class="form-range" id="segmentThreshold" min="0.1" max="0.9" step="0.05" value="0.7">
+                                    <div class="text-muted small">Niedrigere Werte erkennen mehr Bereiche, können aber zu Fehlern führen.</div>
+                                </div>
+                                
+                                <div class="d-grid">
+                                    <button type="button" id="aiRemoveBgBtn" class="btn btn-outline-primary" disabled>
+                                        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" id="aiSpinner"></span>
+                                        Objekt erkennen & Hintergrund entfernen
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="outputArea" style="display: none;">
+                    <div class="card mt-4">
+                        <div class="card-header">Pixeliertes Ergebnis</div>
+                        <div class="card-body text-center">
+                            <div id="result"></div>
+                            
+                            <div class="mt-3">
+                                <button type="button" id="downloadBtn" class="btn btn-success">Herunterladen</button>
+                                <button type="button" id="newImageBtn" class="btn btn-outline-secondary ms-2">Neues Bild</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Historie-Tab -->
+            <div class="tab-pane fade" id="history" role="tabpanel" aria-labelledby="history-tab">
+                <div class="card">
+                    <div class="card-header">Bearbeitungsverlauf</div>
+                    <div class="card-body">
+                        <p id="emptyHistory" class="text-muted">Noch keine Bilder bearbeitet.</p>
+                        <div id="historyList" class="list-group"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <canvas id="sourceCanvas"></canvas>
+        <canvas id="pixelCanvas"></canvas>
+        
+        <footer class="mt-5 text-center text-muted">
+            <p>© 2025 Pixelfy | <a href="https://github.com/DEIN-GITHUB-USERNAME/Pixelfy" target="_blank">GitHub</a></p>
+        </footer>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="pixelfy.js"></script>
+</body>
+</html>
